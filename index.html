@@ -157,7 +157,7 @@
             padding: 15px 10px;
             border-radius: 12px;
             text-align: center;
-            cursor: grab;
+            cursor: pointer;
             transition: all 0.3s ease;
             border: 2px solid transparent;
             font-weight: bold;
@@ -173,8 +173,7 @@
         }
 
         .element:active {
-            cursor: grabbing;
-            transform: rotate(5deg) scale(0.95);
+            transform: scale(0.95);
         }
 
         .element.basic {
@@ -397,22 +396,22 @@
             <input type="text" class="search-box" placeholder="Buscar elementos..." id="searchBox">
             
             <div class="elements-grid scrollbar-custom" id="elementsGrid">
-                <div class="element basic" draggable="true" data-element="Fogo">
+                <div class="element basic" data-element="Fogo">
                     <div>🔥</div>
                     <div>Fogo</div>
                     <div class="element-info">Básico</div>
                 </div>
-                <div class="element basic" draggable="true" data-element="Água">
+                <div class="element basic" data-element="Água">
                     <div>💧</div>
                     <div>Água</div>
                     <div class="element-info">Básico</div>
                 </div>
-                <div class="element basic" draggable="true" data-element="Terra">
+                <div class="element basic" data-element="Terra">
                     <div>🌍</div>
                     <div>Terra</div>
                     <div class="element-info">Básico</div>
                 </div>
-                <div class="element basic" draggable="true" data-element="Ar">
+                <div class="element basic" data-element="Ar">
                     <div>💨</div>
                     <div>Ar</div>
                     <div class="element-info">Básico</div>
@@ -458,6 +457,7 @@
         let combinationsCount = 0;
         let successCount = 0;
         let elementCounts = {};
+        let selectedElement = null;
 
         // Recipe database
         const recipes = {
@@ -536,40 +536,241 @@
             elementCounts[element] = 1;
         });
 
-        // Drag and drop functionality
-        function setupDragAndDrop() {
+        // Click-based selection system
+        function setupClickSystem() {
             const elementsGrid = document.getElementById('elementsGrid');
-            const craftZone = document.getElementById('craftZone');
             const slots = [document.getElementById('slot1'), document.getElementById('slot2')];
+            const craftZone = document.getElementById('craftZone');
 
-            elementsGrid.addEventListener('dragstart', (e) => {
-                if (e.target.classList.contains('element')) {
-                    e.dataTransfer.setData('text/plain', e.target.dataset.element);
+            // Create selection hint
+            const selectionHint = document.createElement('div');
+            selectionHint.className = 'selection-hint';
+            selectionHint.id = 'selectionHint';
+            selectionHint.textContent = 'Clique em um elemento para selecioná-lo';
+            craftZone.appendChild(selectionHint);
+
+            // Setup element selection
+            function setupElementClick(element) {
+                element.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    // Remove previous selection
+                    document.querySelectorAll('.element.selected').forEach(el => {
+                        el.classList.remove('selected');
+                    });
+                    
+                    // Select this element
+                    element.classList.add('selected');
+                    selectedElement = element.dataset.element;
+                    
+                    // Update hint and make slots selectable
+                    updateSelectionHint(`Elemento "${selectedElement}" selecionado. Clique em um slot para colocá-lo.`);
+                    makeSlotesSelectable();
+                });
+            }
+
+            // Setup slot selection
+            slots.forEach((slot, index) => {
+                slot.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    if (selectedElement) {
+                        const slotKey = `slot${index + 1}`;
+                        
+                        // If slot is empty, add element
+                        if (!currentCraft[slotKey]) {
+                            addToSlot(selectedElement, slotKey);
+                            clearSelection();
+                            updateCraftButton();
+                        }
+                    } else if (currentCraft[`slot${index + 1}`]) {
+                        // If no element selected and slot has element, remove it
+                        const slotKey = `slot${index + 1}`;
+                        currentCraft[slotKey] = null;
+                        slot.innerHTML = '';
+                        slot.classList.remove('occupied');
+                        updateCraftButton();
+                        updateSelectionHint('Elemento removido. Clique em um elemento para selecioná-lo.');
+                    }
+                });
+            });
+
+            // Setup initial elements
+            elementsGrid.querySelectorAll('.element').forEach(setupElementClick);
+
+            // Clear selection when clicking elsewhere
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.element') && !e.target.closest('.craft-slot')) {
+                    clearSelection();
                 }
             });
 
-            craftZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                craftZone.classList.add('drag-over');
-            });
+            // Store reference for new elements
+            window.setupElementClick = setupElementClick;
+        }
 
-            craftZone.addEventListener('dragleave', () => {
-                craftZone.classList.remove('drag-over');
-            });
-
-            craftZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                craftZone.classList.remove('drag-over');
-                const elementName = e.dataTransfer.getData('text/plain');
-                
-                if (!currentCraft.slot1) {
-                    addToSlot(elementName, 'slot1');
-                } else if (!currentCraft.slot2) {
-                    addToSlot(elementName, 'slot2');
+        function makeSlotesSelectable() {
+            const slots = [document.getElementById('slot1'), document.getElementById('slot2')];
+            slots.forEach(slot => {
+                if (!slot.classList.contains('occupied')) {
+                    slot.classList.add('selectable');
                 }
-                
-                updateCraftButton();
             });
+        }
 
-            // Click to add to slots
-            elementsGrid.addEventListener('click', (
+        function clearSelection() {
+            document.querySelectorAll('.element.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelectorAll('.craft-slot.selectable').forEach(slot => {
+                slot.classList.remove('selectable');
+            });
+            selectedElement = null;
+            updateSelectionHint('Clique em um elemento para selecioná-lo');
+        }
+
+        function updateSelectionHint(message) {
+            const hint = document.getElementById('selectionHint');
+            hint.textContent = message;
+            hint.classList.add('show');
+            
+            setTimeout(() => {
+                if (hint.textContent === message) {
+                    hint.classList.remove('show');
+                }
+            }, 3000);
+        }
+
+        function addToSlot(elementName, slotId) {
+            const slot = document.getElementById(slotId);
+            const element = getElementData(elementName);
+            
+            slot.innerHTML = `
+                <div style="font-size: 1.5em">${element.emoji}</div>
+                <div style="font-size: 0.8em; margin-top: 5px;">${elementName}</div>
+            `;
+            slot.classList.add('occupied');
+            slot.classList.remove('selectable');
+            currentCraft[slotId] = elementName;
+        }
+
+        function getElementData(elementName) {
+            // Find in recipes or use default
+            for (const recipe of Object.values(recipes)) {
+                if (recipe.result === elementName) {
+                    return recipe;
+                }
+            }
+            
+            // Default emojis for basic elements
+            const defaultEmojis = {
+                'Fogo': '🔥',
+                'Água': '💧',
+                'Terra': '🌍',
+                'Ar': '💨'
+            };
+            
+            return {
+                emoji: defaultEmojis[elementName] || '✨',
+                rarity: 'basic'
+            };
+        }
+
+        function updateCraftButton() {
+            const button = document.getElementById('craftButton');
+            const canCraft = currentCraft.slot1 && currentCraft.slot2;
+            
+            button.disabled = !canCraft;
+            button.textContent = canCraft ? 'Combinar Elementos' : 'Adicione 2 Elementos';
+        }
+
+        function combineElements() {
+            if (!currentCraft.slot1 || !currentCraft.slot2) return;
+            
+            const combo1 = `${currentCraft.slot1}+${currentCraft.slot2}`;
+            const combo2 = `${currentCraft.slot2}+${currentCraft.slot1}`;
+            
+            combinationsCount++;
+            document.getElementById('combinationsCount').textContent = combinationsCount;
+            
+            const recipe = recipes[combo1] || recipes[combo2];
+            
+            if (recipe) {
+                createNewElement(recipe);
+                showResult(recipe, true);
+                showCombo(`${currentCraft.slot1} + ${currentCraft.slot2} = ${recipe.result}`);
+                successCount++;
+                document.getElementById('successCount').textContent = successCount;
+            } else {
+                showResult(null, false);
+                showCombo(`${currentCraft.slot1} + ${currentCraft.slot2} = Nada`);
+            }
+            
+            createFloatingElements();
+            clearCraftArea();
+        }
+
+        function createNewElement(recipe) {
+            if (discoveredElements.has(recipe.result)) {
+                elementCounts[recipe.result] = (elementCounts[recipe.result] || 0) + 1;
+                updateElementDisplay();
+                return;
+            }
+            
+            discoveredElements.add(recipe.result);
+            elementCounts[recipe.result] = 1;
+            
+            const elementsGrid = document.getElementById('elementsGrid');
+            const elementDiv = document.createElement('div');
+            elementDiv.className = `element ${recipe.rarity} new`;
+            elementDiv.dataset.element = recipe.result;
+            
+            elementDiv.innerHTML = `
+                <div>${recipe.emoji}</div>
+                <div>${recipe.result}</div>
+                <div class="element-info">${getRarityText(recipe.rarity)}</div>
+                <div class="element-count">1</div>
+            `;
+            
+            elementsGrid.appendChild(elementDiv);
+            
+            // Setup click for the new element
+            if (window.setupElementClick) {
+                window.setupElementClick(elementDiv);
+            }
+            
+            // Update counters
+            document.getElementById('elementCount').textContent = discoveredElements.size;
+            
+            // Remove animation class after animation completes
+            setTimeout(() => {
+                elementDiv.classList.remove('new');
+            }, 1000);
+        }
+
+        function getRarityText(rarity) {
+            const rarityMap = {
+                'basic': 'Básico',
+                'advanced': 'Avançado',
+                'rare': 'Raro',
+                'legendary': 'Lendário'
+            };
+            return rarityMap[rarity] || 'Comum';
+        }
+
+        function showResult(recipe, success) {
+            const resultDisplay = document.getElementById('resultDisplay');
+            const resultContent = document.getElementById('resultContent');
+            
+            if (success) {
+                resultContent.innerHTML = `
+                    <div style="font-size: 2em; margin-bottom: 10px;">${recipe.emoji}</div>
+                    <div style="font-size: 1.2em; font-weight: bold; color: #27ae60;">${recipe.result}</div>
+                    <div style="font-size: 0.9em; color: #666; margin-top: 5px;">${getRarityText(recipe.rarity)}</div>
+                `;
+                resultDisplay.style.background = 'rgba(46, 204, 113, 0.9)';
+                resultDisplay.style.color = 'white';
+            } else {
+                resultContent.innerHTML = `
+                    <div style="font-size: 2em; margin-bottom: 10px;">❌</div>
+                    <div style="font-size: 1.2em; font-weight: bold;">
