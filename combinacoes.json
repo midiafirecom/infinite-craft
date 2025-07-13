@@ -1,0 +1,6 @@
+{
+  "Fogo+Água": "Vapor",
+  "Água+Terra": "Lama",
+  "Lama+Lama": "Tijolo Molhado",
+  "Tijolo Molhado+Fogo": "Tijolo"
+}
